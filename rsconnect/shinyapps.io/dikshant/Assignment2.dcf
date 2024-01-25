@@ -1,0 +1,14 @@
+name: Assignment2
+title: Assignment2
+username:
+account: dikshant
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 7763519
+bundleId: 6569340
+url: https://dikshant.shinyapps.io/Assignment2/
+when: 1669757217.7604
+lastSyncTime: 1669757217.76045
+asMultiple: FALSE
+asStatic: FALSE
+ignoredFiles: A2.docx|A2.html|A2.Rmd

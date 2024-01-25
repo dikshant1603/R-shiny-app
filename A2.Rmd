@@ -1,0 +1,315 @@
+---
+title: "Assignment 2"
+output: html_document
+date: "2022-11-22"
+Author: "Dikshant Joshi"
+always_allow_html: true
+---
+
+```{r}
+library(jsonlite)
+library(tidyverse)
+library(tidytext)
+```
+
+
+```{r}
+#Q1:Import the data
+Hotels<-read_csv("Hotels.csv")
+HotelReviews<-read_csv("HotelReviews.csv")
+glimpse(Hotels)
+```
+
+
+```{r}
+#Q2:Creating tibble that excludes columns
+Hotels_tbl<-as_tibble(Hotels)
+reviews_tbl<-as_tibble(HotelReviews)
+Hotels_tbl=Hotels_tbl %>%
+  select(-starts_with("hours"))
+```
+
+```{r}
+#3.1
+Hotels_tbl %>%
+  filter(str_detect(state,"NV"))%>%
+  filter(str_detect(categories,"Car Rental"))%>%
+  count()
+```
+
+```{r}
+#3.2
+Hotels_tbl %>%
+  filter(str_detect(categories,"Car Rental"))%>%
+  group_by(state)%>%
+  count()
+```
+
+```{r}
+#3.3
+Hotels_tbl %>%
+  filter(str_detect(categories,"Car Rental"))%>%
+  filter(is_open == 1 )%>%
+  count()
+
+Hotels_tbl %>%
+  filter(str_detect(categories,"Car Rental"))%>%
+  summarise(proportion=sum(is_open/length(is_open)))
+```
+
+```{r}
+#3.4
+Hotels_tbl %>%
+  type_convert(cols(stars=col_double()))%>%
+  select(state, stars)%>%
+  group_by(state)%>%
+  summarise(Average_stars = mean(stars))%>%
+  arrange(desc(Average_stars))%>%
+  head(5)
+
+```
+
+```{r}
+#3.5
+Hotels_tbl %>%
+  select(name, stars)%>%
+  filter(stars==5)%>%
+  group_by(name)%>%
+  summarise(Five_star_reviews = n())%>%
+  arrange(desc(Five_star_reviews))%>%
+  head(10)
+
+```
+
+```{r}
+#3.6
+Hotels_tbl %>%
+  select(name)%>%
+  group_by(name)%>%
+  summarise(No_of_times = n())%>%
+  arrange(desc(No_of_times))%>%
+  head(10)
+
+```
+
+```{r}
+#3.7
+erac=Hotels_tbl %>%
+  filter(str_detect(name,"Enterprise Rent-A-Car"))
+```
+
+```{r}
+#3.8
+business_reviews<-erac%>%
+  left_join(reviews_tbl, by="business_id")
+```
+
+```{r}
+#3.9
+options(dplyr.summarise.inform = FALSE)
+business_reviews%>%
+  select(business_id,address,city,state)%>%
+  group_by(business_id,address,city,state)%>%
+  summarise(No_of_reviews=n())%>%
+  arrange(desc(No_of_reviews))%>%
+  head(10)
+```
+
+
+```{r}
+#3.10
+business_reviews%>%
+  mutate(text_new = strsplit(text," "))%>%
+  unnest(text_new)%>%
+  select(text_new)%>%
+  mutate(text_new = str_trim(str_squish(text_new)))%>%
+  mutate(text_new = str_to_lower(text_new))%>%
+  filter(!text_new %in% stop_words$word)%>%
+  filter(!text_new %in% c("enterprise","rental","car","cars",NA,""))%>%
+  count(text_new)%>%
+  arrange(desc(n))%>%
+  head(10)
+```
+
+```{r}
+#3.11
+reviews_sentiment<-business_reviews %>%
+  unnest_tokens(word,text)%>%
+  inner_join(get_sentiments("afinn"), by="word")%>%
+  group_by(review_id)%>%
+  summarise(sentiment= mean(value))%>%
+  ungroup()
+
+reviews_sentiment%>%
+  arrange(sentiment)%>%
+  top_n(-10,sentiment)%>%
+  left_join(business_reviews,by="review_id")%>%
+  select(address,city,date,sentiment,text)
+  
+```
+
+```{r}
+#3.12
+reviews_sentiment%>%
+  arrange(desc(sentiment))%>%
+  top_n(10,sentiment)%>%
+  left_join(business_reviews,by="review_id")%>%
+  select(address,city,date,sentiment,text)
+```
+
+```{r}
+#4.1
+library(lubridate)
+business_reviewsDateFormatted<-business_reviews%>%
+  mutate(date_formatted = as_date(strptime(date,"%m/%d/%Y %H:%M")),
+         month_formatted = month(strptime(date,"%m/%d/%Y %H:%M",)),
+         day_formatted = day(strptime(date,"%m/%d/%Y %H:%M")),
+         year_formatted = year(strptime(date,"%m/%d/%Y %H:%M")),
+         hour_formatted = hour(strptime(date,"%m/%d/%Y %H:%M")))
+
+business_reviewsDateFormatted%>%
+  select(year_formatted)%>%
+  filter(!year_formatted %in% NA)%>%
+  group_by(year_formatted)%>%
+  summarise(No_of_reviews = n())%>%
+  ggplot(aes(x=year_formatted,y=No_of_reviews))+
+  geom_line()+
+  labs(y= "Number of Reviews", x = "Year")
+```
+
+```{r}
+#4.2
+business_reviewsDateFormatted%>%
+  select(state)%>%
+  group_by(state)%>%
+  summarise(No_of_reviews = n())%>%
+  ggplot(aes(x=state,y=No_of_reviews))+
+  geom_col()
+```
+
+```{r}
+#4.3
+Hotels_tbl%>%
+  group_by(is_open)%>%
+  summarise(Count=n())%>%
+  mutate(is_open=as.factor(is_open),percentage=round(Count/sum(Count)*100,2),LabelPosition = cumsum(percentage)-.1*percentage)%>%
+           ggplot(aes(x=2,y=percentage,fill=is_open))+
+           geom_bar(stat = "identity")+
+           coord_polar("y")+
+           geom_text(aes(y= LabelPosition, label= paste(percentage,"%",sep="")),col="white")+
+  theme_void()+
+  scale_fill_brewer(palette = "Dark2")+
+  xlim(.2,2.5)
+```
+
+```{r}
+#4.4
+business_reviewsDateFormatted%>%
+  mutate(Numberofwords = str_count(text,boundary("word")))%>%
+  mutate(MonthName=month(ymd(date_formatted),label=TRUE))%>%
+  filter(!MonthName %in% NA)%>%
+  group_by(MonthName)%>%
+  summarize(Numberofwords=median(Numberofwords))%>%
+  ggplot(aes(x=MonthName ,y=Numberofwords))+
+  geom_col()+
+  coord_flip()
+```
+
+```{r}
+library(ggpubr)
+#4.5
+business_reviewsDateFormatted%>%
+  filter(!funny %in% NA)%>%
+  filter(!useful %in% NA)%>%
+  ggplot(aes(x=funny, y=useful))+
+  geom_point()+
+  geom_smooth(method=lm)+
+  stat_regline_equation(label.y = 90, aes(label = ..eq.label..)) +
+  stat_regline_equation(label.y = 100, aes(label = ..rr.label..))
+```
+
+```{r}
+#4.6
+library(wordcloud)
+createWordCloud = function(train)
+{
+  business_reviewsDateFormatted%>%
+    unnest_tokens(word,text)%>%
+    filter(!word %in% stop_words$word, !word %in% c("enterprise", "rental" , "car", "cars", NA))%>%
+    count(word,sort = TRUE)%>%
+    ungroup() %>%
+    head(50) %>%
+    with(wordcloud(word,n,max.words =50,colors=brewer.pal(8,"Dark2")))
+  
+}
+createWordCloud(text)
+```
+
+```{r}
+#4.7
+positiveWordsBarGraph<- function(SC)
+{
+  contributions <- SC %>%
+unnest_tokens (word, text) %>%
+count(word, sort=TRUE) %>%
+ungroup()%>%
+inner_join(get_sentiments("afinn"), by="word") %>%
+group_by (word) %>%
+summarize(contribution=sum(value), n=n())
+  
+contributions %>%
+top_n(15, abs(contribution))%>%
+  top_n(-15, abs(contribution))%>%
+mutate (word = reorder(word, contribution)) %>%
+head(30) %>%
+ggplot(aes (word, contribution, fill = contribution > 0)) +
+geom_col(show.legend=FALSE) +
+coord_flip() + theme_bw()
+}
+
+
+positiveWordsBarGraph(business_reviews)
+```
+```{r}
+#4.8
+library(leaflet) 
+pal <- colorFactor(c("purple", "red", "orange", "black", "blue"),
+                     domain=unique(business_reviews$stars))
+
+map<-leaflet(business_reviews) %>%
+addProviderTiles ("CartoDB.Positron") %>%
+addCircleMarkers (
+color= ~pal(business_reviews$stars),
+stroke = FALSE, fillOpacity = 0.5,
+lat=business_reviews$latitude,
+lng=business_reviews$longitude,
+clusterOptions = markerClusterOptions(),
+popup=as.character(business_reviews$address))
+map
+
+
+```
+
+
+```{r}
+#4.9
+#which month has maximum number of review count
+business_reviewsDateFormatted%>%
+  select(month_formatted)%>%
+  filter(!month_formatted %in% NA)%>%
+  group_by(month_formatted)%>%
+  summarise(No_of_reviews = n())%>%
+  arrange(desc(No_of_reviews))%>%
+  ggplot(aes(x=month_formatted,y=No_of_reviews))+
+  geom_col()
+
+#which month has maximum store opened
+business_reviewsDateFormatted%>%
+  select(month_formatted,is_open)%>%
+  filter(!month_formatted %in% NA)%>%
+  group_by(month_formatted)%>%
+  summarise(total_open = sum(is_open))%>%
+  ggplot(aes(x=month_formatted,y=total_open))+
+  geom_col()
+
+```
